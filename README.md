@@ -1,3 +1,7 @@
+# ASLCS - American Sign Language Classification System
+Enhancing Communication Through Machine Learning and Computer Vision
+
+
 ### Overview
 
 American Sign Language (ASL) is a sophisticated and expressive visual-gestural language primarily employed by the Deaf and hard-of-hearing communities in the United States of America. Successful communication in ASL relies on a diverse array of hand forms, facial expressions, and body movements. However, comprehending and interpreting these signs can pose a challenge for those not proficient in ASL. This is where the integration of machine learning (ML) and computer vision techniques becomes pivotal.
