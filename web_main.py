@@ -2,47 +2,55 @@ import streamlit as st
 import cv2
 import numpy as np
 import time
-import openai
-from openai import OpenAI
-
-from deep_translator import GoogleTranslator
-from dotenv import load_dotenv
-import os
+from gtts import gTTS
 import random
+import tensorflow as tf
 
-# Load environment variables from .env file
-load_dotenv()
+# Load the saved model (make sure the path is correct)
+model_path = 'gesture_model.h5'  # Update this path if needed
+model = tf.keras.models.load_model(model_path)
 
+# Function to preprocess the image before passing it to the model
+def preprocess_frame(frame):
+    # Convert the frame to grayscale (if needed)
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Convert grayscale to RGB if the model expects RGB input
+    gray_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
+    
+    # Resize the frame to match the input shape of your model
+    resized_frame = cv2.resize(gray_frame, (256, 256))  # Adjust size as per your model input
+    resized_frame = np.expand_dims(resized_frame, axis=0)  # Add batch dimension
+    
+    # Normalize the image (assuming your model expects values between 0 and 1)
+    resized_frame = resized_frame / 255.0
+    
+    return resized_frame
 
-# Mock word predictions for testing
-def mock_word_predictions():
-    words = ["hello", "world", "sign", "language", "test", "mock", "streamlit", "openai"]
-    return random.choice(words)
+# Function to predict the label from the preprocessed frame
+def predict_gesture(frame):
+    preprocessed_frame = preprocess_frame(frame)
+    
+    # Predict using the model
+    prediction = model.predict(preprocessed_frame)
+    
+    # Assuming the model has multiple classes, get the predicted class
+    predicted_class_index = np.argmax(prediction)
+    
+    # You can map the predicted index to a class label (replace 'class_labels' with your actual class labels)
+    class_labels = ['hello', 'world', 'sign', 'language', 'test']  # Update this with your actual labels
+    predicted_class_label = class_labels[predicted_class_index]
+    
+    return predicted_class_label
 
-def generate_sentence(prompt):
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",  # Use "gpt-4" or "gpt-3.5-turbo"
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        st.error(f"Error generating text: {e}")
-        return "Error generating text."
-
-
-
-# Function to translate text to Spanish
-def translate_to_spanish(text):
-    try:
-        translated_text = GoogleTranslator(source='en', target='es').translate(text)
-        return translated_text
-    except Exception as e:
-        st.error(f"Error translating text: {e}")
-        return "Translation error."
+# Function to convert text to speech using gTTS
+def text_to_speech(text):
+    tts = gTTS(text=text, lang='en')
+    
+    # Save the audio to a temporary file
+    audio_path = "/tmp/temp_audio.mp3"  # Adjust this if running on Windows or another system
+    tts.save(audio_path)
+    
+    return audio_path
 
 # Initialize session state variables
 if 'page' not in st.session_state:
@@ -76,22 +84,18 @@ def user_input_page():
 # Page 2: Permissions Guide
 def guide_page():
     st.title("Permissions Required")
-    st.subheader(f"Hello, {st.session_state.username}!")
+    st.subheader(f"Hello, {st.session_state.username}! Please grant necessary permissions.")
     st.write("""
     To use this app, we need the following permissions:
-    
     - **Camera:** To capture your gestures or sign language in real-time.
     - **Microphone:** To capture audio input for interpretation.
     """)
-
     st.write("""
     Please allow camera and microphone permissions when prompted by your browser.
     - Your camera will be used to capture video input.
-    - Your microphone will be used to capture audio input.
     """)
 
     st.camera_input("Camera Permission Test", key="camera_test_placeholder")
-    st.audio_input("Microphone Permission Test", key="mic_test_placeholder")
 
     if st.button("Grant Permissions"):
         st.session_state.page = 'live_stream'
@@ -120,28 +124,25 @@ def live_stream_page():
             break
 
         # Show live video stream
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        stframe.image(frame, channels="RGB", caption="Live Video Stream", use_container_width=True)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert to RGB
+        stframe.image(frame_rgb, channels="RGB", caption="Live Video Stream", use_container_width=True)
 
-        # Simulated Prediction Logic
-        simulated_prediction = mock_word_predictions()  # Simulated prediction
-        predicted_words.append(simulated_prediction)
+        # Make a prediction using the loaded model
+        predicted_label = predict_gesture(frame)  # Predict label from the frame
+        predicted_words.append(predicted_label)
 
-        # If enough words are collected, send them to OpenAI API
+        # If enough words are collected, generate the sentence
         if len(predicted_words) >= 5:  # Example threshold
             predicted_sentence = " ".join(predicted_words)
             predicted_words = []  # Reset words buffer
             
-            # Generate sentence using GPT-3.5 Turbo
-            llm_output = generate_sentence(predicted_sentence)
+            # Convert predicted sentence to speech
+            audio_path = text_to_speech(predicted_sentence)
+            st.session_state.predicted_sentence = predicted_sentence
             
-            # Translate to Spanish
-            translated_sentence = translate_to_spanish(llm_output)
-            
-            # Update session state
-            st.session_state.predicted_sentence = llm_output
-            st.success(f"English: {llm_output}")
-            st.success(f"Español: {translated_sentence}")
+            # Display the predicted sentence and provide the audio feedback
+            st.success(f"Predicted Sentence: {predicted_sentence}")
+            st.audio(audio_path, format="audio/mp3")
 
         # Delay for real-time streaming
         time.sleep(0.1)
